@@ -30,6 +30,8 @@ namespace TimedHostedServiceExample.Services
 
             this._timer = new Timer(this.FireTask, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30));
 
+            this.logger.LogInformation("Started timer");
+
             return Task.CompletedTask;
         }
 
@@ -37,7 +39,12 @@ namespace TimedHostedServiceExample.Services
         {
             if (this._executingTask == null || this._executingTask.IsCompleted)
             {
+                this.logger.LogInformation("No task is running, check for new job");
                 this._executingTask = this.ExecuteNextJobAsync(this._stoppingCts.Token);
+            }
+            else
+            {
+                this.logger.LogInformation("There is a task still running, wait for next cycle");
             }
         }
 
@@ -53,15 +60,26 @@ namespace TimedHostedServiceExample.Services
             if (nextJobData == null)
             {
                 // no next job
+                this.logger.LogInformation("No new job found, wait for next cycle");
                 return;
             }
 
             // simulate long running job
+            this.logger.LogInformation("Execute job with Id: {0} Delay: {1}", nextJobData.Id, nextJobData.Delay);
+
             await Task.Delay(TimeSpan.FromSeconds(nextJobData.Delay));
+
+            this.logger.LogInformation("Job execution finished (Id: {0})", nextJobData.Id);
+
+            // remove executed job from queue
+            context.Remove(nextJobData);
+            await context.SaveChangesAsync();
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            this.logger.LogInformation("Initiate graceful shutdown");
+
             this._timer.Change(Timeout.Infinite, 0);
 
             if (this._executingTask == null || this._executingTask.IsCompleted)
